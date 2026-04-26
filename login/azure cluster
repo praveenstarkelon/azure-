@@ -1,0 +1,33 @@
+azure mai login k baad 
+
+az aks get-credentials \
+  --resource-group rg-gm-aks-prod \
+  --name production-cluster-azure-for-goodmeetings
+
+============================================================
+Check karo:
+kubectl config current-context
+kubectl config get-contexts
+==============================================================
+Disconnect
+
+kubectl config unset current-context
+
+==================================================================
+
+# Saare contexts dekho
+kubectl config get-contexts
+
+# Koi bhi choose karo
+kubectl config use-context <context-name>
+
+===================================================================
+config delete karne k liye 
+
+# Specific context hatao
+kubectl config delete-context production-cluster-azure-for-goodmeetings
+
+# Phir dobara connect karna ho to
+az aks get-credentials \
+  --resource-group rg-gm-aks-prod \
+  --name production-cluster-azure-for-goodmeetings
