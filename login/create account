@@ -1,0 +1,254 @@
+Step 1 — Microsoft Account banao:
+outlook.com jaao:
+"Create free account" click karo
+→ Email: yourchoice@outlook.com
+→ Password set karo
+→ Verify karo
+
+Step 2 — Azure Free Account banao:
+azure.microsoft.com/free jaao:
+"Start free" click karo
+→ Microsoft account se sign in karo
+  (jo abhi banaya)
+→ Profile fill karo:
+   First name, Last name
+   Phone number (OTP aayega)
+   Country: India
+→ Credit card details daalo
+  (charge nahi hoga — sirf verify ke liye)
+→ Agreement accept karo
+→ Sign up!
+
+Jo milega:
+Naya Account:  yourchoice@outlook.com
+Naya Tenant:   yourchoice.onmicrosoft.com  ← automatically banta hai
+               (ya custom domain laga sakte ho)
+Free Credit:   $200 (30 din valid)
+Subscription:  "Azure Free Trial" automatically banti hai
+
+Structure jo ban jayega:
+Tenant: yourchoice.onmicrosoft.com  ← naya!
+│
+├── Users:
+│     └── yourchoice@outlook.com    ← aap (Owner)
+│
+└── Subscriptions:
+      └── Azure Free Trial           ← automatically bani
+            └── $200 credit
+
+Step 3 — Verify karo:
+Azure Portal mein:
+portal.azure.com → login karo
+Search: Subscriptions → dikh jayegi
+Search: Microsoft Entra ID → Tenant dikh jayega
+
+Step 4 — Az CLI se connect karo:
+bashaz login
+# Browser mein naya account se login karo
+az account show
+
+HomeTenantId aur TenantId:
+Naye account mein:
+HomeTenantId = yourchoice tenant  ← aapka ghar
+TenantId     = yourchoice tenant  ← same!
+
+Dono same honge kyunki
+aap apne hi tenant mein ho!
+
+Guest scenario try karna ho:
+Naye account ko:
+adminroad2saas tenant mein invite karo
+→ Tab HomeTenantId alag hoga!
+😊You said: ye jo abhi fresh azure account banaya hai , ab usem user /account bhi to banaene padengye jo abhi fresh azure account banaya hai , ab usem user /account bhi to banaene padeng3:48 PMClaude responded: Haan!Haan! Bilkul — step by step UI se:
+
+Abhi jo ban gaya:
+Tenant: yourchoice.onmicrosoft.com
+└── Users:
+      └── yourchoice@outlook.com  ← sirf aap (Owner)
+└── Subscription: Azure Free Trial
+
+Naya User banana — UI se:
+Step 1 — Microsoft Entra ID jaao:
+portal.azure.com
+→ Search bar: "Microsoft Entra ID"
+→ Click karo
+Step 2 — Users section:
+Left menu → Users → All Users
+→ "+ New User" click karo
+→ "Create New User" select karo
+Step 3 — Form bharo:
+Identity:
+  User principal name: john@yourchoice.onmicrosoft.com
+  Display name:        John Doe
+
+Password:
+  Auto-generate ya manual set karo
+  "TestPass@123"
+
+Properties (optional):
+  Job title: Developer
+  Department: Engineering
+Step 4 — Create click karo!
+
+Abhi structure:
+Tenant: yourchoice.onmicrosoft.com
+└── Users:
+      ├── yourchoice@outlook.com  ← Owner (aap)
+      └── john@yourchoice.com     ← naya user
+└── Subscription: Azure Free Trial
+
+Lekin abhi John ko Subscription access nahi hai!
+Step 5 — Subscription access do:
+Search: Subscriptions
+→ "Azure Free Trial" click karo
+→ Left menu: Access Control (IAM)
+→ "+ Add" → "Add Role Assignment"
+→ Role: Contributor
+→ Members: john@yourchoice.onmicrosoft.com
+→ Review + Assign
+
+Ab structure:
+Tenant: yourchoice.onmicrosoft.com
+│
+├── Users:
+│     ├── yourchoice@outlook.com  ← Owner
+│     └── john@yourchoice.com     ← Contributor
+│
+└── Subscription: Azure Free Trial
+      └── Resources (VMs, AKS etc.)
+            ↑
+            John access kar sakta hai!
+
+Step 6 — John se login karo (verify):
+Incognito window mein:
+portal.azure.com
+→ john@yourchoice.onmicrosoft.com
+→ TestPass@123
+
+Step 7 — CLI se verify:
+bashaz logout
+az login
+# john se login karo
+
+az account show --query "{
+  User:user.name,
+  Tenant:tenantId,
+  HomeTenant:homeTenantId
+}" --output table
+Dono same honge — kyunki John bhi same tenant ka hai!
+
+Guest scenario:
+HomeTenantId different dekhna hai toh:
+adminroad2saas tenant se:
+→ Entra ID → Users → Invite External User
+→ john@yourchoice.onmicrosoft.com invite karo
+
+Ab John ke paas 2 tenants honge:
+  HomeTenant: yourchoice    ← ghar
+  TenantId:   adminroad2saas ← guest
+Kahan tak pahunche ho — portal open hai? 😊You said: ab client wala scene samjhaooab client wala scene samjhaoo3:52 PMClaude responded: Bilkul!Bilkul! Client scenario samjhate hain:
+
+Real scenario:
+Aap = Consultant (adminroad2saas)
+Client = XYZ Company
+
+2 Tenants hain:
+Tenant A: adminroad2saas.onmicrosoft.com
+└── Users:
+      └── devops@adminroad2saas.com  ← aap
+
+Tenant B: xyzcompany.onmicrosoft.com
+└── Users:
+      └── sara@xyzcompany.com  ← client
+
+Client ne aapko invite kiya:
+UI se — Client ke portal mein:
+portal.azure.com (sara@xyzcompany.com se login)
+→ Microsoft Entra ID
+→ Users
+→ "+ New User"
+→ "Invite External User"  ← yeh select karo!
+
+Form:
+  Email: devops@adminroad2saas.com  ← aapka email
+  Name:  DevOps
+  Message: "Please join our tenant"
+
+→ Send Invitation
+
+Aapko email aayega:
+Subject: "sara@xyzcompany.com invited you"
+→ "Accept Invitation" click karo
+→ Browser mein xyzcompany tenant khulega
+→ Aap Guest ban gaye!
+
+Ab structure:
+Tenant A: adminroad2saas.onmicrosoft.com
+└── Users:
+      └── devops@adminroad2saas.com  ← Member (ghar)
+
+Tenant B: xyzcompany.onmicrosoft.com
+└── Users:
+      ├── sara@xyzcompany.com         ← Member
+      └── devops@adminroad2saas.com   ← GUEST! ← aap
+
+Client subscription pe access do:
+sara@xyzcompany.com se:
+→ Subscriptions
+→ XYZ Production
+→ Access Control (IAM)
+→ Add Role Assignment
+→ Role: Contributor
+→ Member: devops@adminroad2saas.com  ← aapko
+→ Review + Assign
+
+Ab aap CLI se check karo:
+bashaz logout
+az login
+# devops@adminroad2saas.com se login
+
+az account list --output table
+Output:
+Name                  TenantId        HomeTenantId    IsDefault
+────────────────────  ──────────────  ──────────────  ─────────
+AdminRoad Dev         54359ef5-...    54359ef5-...    True
+AdminRoad Prod        54359ef5-...    54359ef5-...    False
+XYZ Production        bbbb-bbbb-...   54359ef5-...    False
+                                      ↑
+                                      HomeTenantId alag!
+                                      Aapka ghar adminroad hai
+                                      lekin XYZ ka subscription bhi dikh raha hai!
+
+Client ka kaam karna:
+bash# XYZ subscription switch karo
+az account set \
+  --subscription "XYZ-Production-ID"
+
+# Verify
+az account show --query "{
+  User:user.name,
+  Subscription:name,
+  Tenant:tenantId,
+  HomeTenant:homeTenantId
+}" --output table
+Output:
+User                           Subscription     Tenant      HomeTenant
+─────────────────────────────  ───────────────  ──────────  ──────────
+devops@adminroad2saas.com      XYZ Production   bbbb-bbbb   54359ef5
+                                                ↑           ↑
+                                                Different!  Aapka ghar
+
+Summary:
+HomeTenantId = 54359ef5 (adminroad2saas) ← hamesha same
+TenantId     = bbbb-bbbb (xyzcompany)    ← client ka
+               Different hain!
+               Matlab aap guest ho XYZ mein!
+
+Practically try karna hai?
+Aapke paas 2 Azure accounts hain:
+1. devops@adminroad2saas.com  ← already hai
+2. Naya account banao         ← fresh Azure account
+Naye account se:
+Entra ID → Invite External User
+→ devops@adminroad2saas.com invite karo
+Tab real guest scenario dikh jayega! 
