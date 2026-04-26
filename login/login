@@ -1,0 +1,76 @@
+Tenant (Company)
+├── Users/Accounts
+│     ├── devops@adminroad2saas.com
+│     ├── admin@adminroad2saas.com
+│     └── developer@adminroad2saas.com
+│
+└── Subscriptions
+      ├── Subscription 1 (dev)
+      │     └── Resources (VMs, AKS)
+      ├── Subscription 2 (production)
+      │     └── Resources (VMs, AKS)
+      └── Subscription 3 (staging)
+            └── Resources (VMs, AKS)
+
+==============================================================
+Tenant: adminroad2saas
+├── Users:
+│     └── devops@adminroad2saas.com
+│
+└── Subscriptions:
+      ├── 4e053913  (dev?)
+      ├── 10bced31  (production) ← AKS yahan hai
+      └── a61a7a64  (staging?)
+=====================================================
+
+==============================================================================================================================
+
+Step 1 — Az login:
+az login
+Browser khulega → login karo
+===================================================================================================================================
+Step 2 — Subscription set karo:
+az account set --subscription "10bced31-41b7-455e-aa4f-9cd3348d156b"
+=======================================================================================================================================
+Credentials check karne ke liye:
+
+1. Login hai ya nahi:
+az account show
+
+az account show --output table
+
+2. Token kab expire hoga:
+az account get-access-token --query "expiresOn"
+
+3. Kaun sa account logged in hai:
+az account show --query "{Name:name, User:user.name, SubscriptionId:id}"
+
+
+============================================================================================================================================
+First Get the Last modification 
+Command
+cat ~/.azure/msal_token_cache.json | python3 -c "
+import json,sys
+data = json.load(sys.stdin)
+for k,v in data.get('RefreshToken', {}).items():
+    print(json.dumps(v, indent=2))
+"
+
+========================================================
+
+Then last modification time will put in belwo command 
+Command
+python3 -c "
+import datetime
+last_mod = 1777186680
+# Refresh token 90 days valid hota hai
+expiry = datetime.datetime.fromtimestamp(last_mod) + datetime.timedelta(days=90)
+print('Last login:', datetime.datetime.fromtimestamp(last_mod))
+print('Expires on:', expiry)
+"
+*************************************************************
+Output aayega kuch aisa:
+Last login: 2026-04-26 11:44:40
+Expires on: 2026-07-25 11:44:40
+Matlab July 2026 tak login rehega — 90 din! 😊
+=======================================================================
