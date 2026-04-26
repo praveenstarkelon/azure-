@@ -1,0 +1,79 @@
+Kind Setup Guide
+Prerequisites
+=======================================
+1. Docker Install karo
+sudo apt install docker.io -y
+========================================
+2. Docker group mein user add karo
+(Root user nahi chahiye — group se kaam chalega)
+
+sudo usermod -aG docker $USER
+============================================
+3. Group apply karo
+newgrp docker
+===========================================
+4. Verify karo
+docker --version
+docker ps
+=============================================
+Output aana chahiye:
+Docker version 29.x.x
+CONTAINER ID   IMAGE   COMMAND   ...
+
+Kind Install
+5. Kind download karo
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64
+================================================================
+6. Executable banao
+chmod +x ./kind
+===============================================================
+7. System path mein move karo
+sudo mv ./kind /usr/local/bin/kind
+=================================================================
+8. Verify karo
+kind version
+=======================================================================
+Cluster Config Banao
+9. Config file banao
+=======================================================================
+cat > kind-config.yaml << EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+  - role: worker
+EOF
+===========================================================================
+10. Verify config
+cat kind-config.yaml
+=======================================================================
+Cluster Create karo
+11. Cluster banao
+
+kind create cluster \
+  --name observability-test \
+  --config kind-config.yaml
+
+5-10 minute lagenge!
+
+12. Verify karo
+kubectl get nodes
+Output aana chahiye:
+NAME                              STATUS   ROLES
+observability-test-control-plane  Ready    control-plane
+observability-test-worker         Ready    worker
+observability-test-worker2        Ready    worker
+observability-test-worker3        Ready    worker
+
+Troubleshooting
+Docker permission error aaye:
+bashsudo usermod -aG docker $USER
+newgrp docker
+Kind cluster already exists:
+bashkind delete cluster --name observability-test
+kind create cluster --name observability-test --config kind-config.yaml
+Nodes not ready:
+bashkubectl get nodes
+kubectl describe node <node-name>
