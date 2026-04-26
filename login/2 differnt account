@@ -1,0 +1,53 @@
+Step 1 — Pehle Netflix se login karo:
+bashaz login
+# Browser mein: netflix@outlook.com
+# Password daalo
+
+Step 2 — Phir Mobikwik se login karo:
+bashaz login
+# Browser mein: mobikwik@outlook.com
+# Password daalo
+Dono cached ho jayenge!
+
+Step 3 — Verify karo dono hain:
+bashaz account list --output table
+Output:
+Name              User                    IsDefault
+────────────────  ──────────────────────  ─────────
+Azure Free Trial  netflix@outlook.com     True
+Azure Free Trial  mobikwik@outlook.com    False
+
+Step 4 — Switch karna:
+bash# Netflix pe jaao
+az account set \
+  --subscription "netflix-subscription-id"
+
+# Mobikwik pe jaao
+az account set \
+  --subscription "mobikwik-subscription-id"
+
+Step 5 — Current check karo:
+bashaz account show --query "user.name" --output tsv
+
+Problem — dono ka naam same hoga:
+Azure Free Trial  netflix@outlook.com
+Azure Free Trial  mobikwik@outlook.com
+Solution — Subscription ID se switch karo:
+bash# Netflix ID
+az account show \
+  --query "id" \
+  --output tsv
+
+# Mobikwik ID
+az account show \
+  --query "id" \
+  --output tsv
+
+Best practice — aliases:
+bashecho "alias az-netflix='az account set --subscription \"netflix-sub-id\"'" >> ~/.bashrc
+echo "alias az-mobikwik='az account set --subscription \"mobikwik-sub-id\"'" >> ~/.bashrc
+source ~/.bashrc
+
+# Ab bas:
+az-netflix   # Netflix switch
+az-mobikwik  # Mobikwik switch
