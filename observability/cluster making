@@ -67,6 +67,14 @@ observability-test-worker         Ready    worker
 observability-test-worker2        Ready    worker
 observability-test-worker3        Ready    worker
 
+
+inno@inno-ThinkPad-E14-Gen-2:~/Downloads$ kubectl get nodes
+NAME                               STATUS   ROLES           AGE   VERSION
+observability-test-control-plane   Ready    control-plane   77s   v1.29.2
+observability-test-worker          Ready    <none>          53s   v1.29.2
+observability-test-worker2         Ready    <none>          54s   v1.29.2
+observability-test-worker3         Ready    <none>          53s   v1.29.2
+
 Troubleshooting
 Docker permission error aaye:
 bashsudo usermod -aG docker $USER
@@ -77,3 +85,12 @@ kind create cluster --name observability-test --config kind-config.yaml
 Nodes not ready:
 bashkubectl get nodes
 kubectl describe node <node-name>
+===================================================================================================
+
+Now labeling 
+
+kubectl label node observability-test-worker role=prometheus
+kubectl label node observability-test-worker2 role=loki
+kubectl label node observability-test-worker3 role=app
+
+
