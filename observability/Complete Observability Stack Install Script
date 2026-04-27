@@ -171,7 +171,10 @@ EVENT_EXPORTER_VERSION=$(helm search repo bitnami/kubernetes-event-exporter \
   --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['version'])")
 
 LOKI_APP=$(helm search repo grafana/loki-stack \
-  --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['app_version'])")
+  --output json | python3 -c "import json,sys; \
+  data=json.load(sys.stdin); \
+  tag=data[0]['app_version']; \
+  print(tag.lstrip('v'))")
 
 echo ""
 echo "  📋 Versions:"
