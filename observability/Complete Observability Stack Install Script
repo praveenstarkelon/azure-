@@ -1,0 +1,360 @@
+cat > ~/install-everything.sh << 'EOF'
+#!/bin/bash
+
+echo "================================================"
+echo "   Complete Observability Stack Install Script  "
+echo "================================================"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 1 — CLEANUP
+# ─────────────────────────────────────────
+echo "📦 Phase 1 — Cleanup..."
+
+# Kind cluster delete
+if kind get clusters 2>/dev/null | grep -q "observability-test"; then
+  echo "  Deleting kind cluster..."
+  kind delete cluster --name observability-test
+fi
+
+# Helm repos remove
+for repo in prometheus-community grafana bitnami stakater; do
+  if helm repo list 2>/dev/null | grep -q "$repo"; then
+    echo "  Removing helm repo: $repo"
+    helm repo remove $repo
+  fi
+done
+
+# Old chart folder delete
+if [ -d ~/my-observability ]; then
+  echo "  Removing old chart folder..."
+  rm -rf ~/my-observability
+fi
+
+echo "✅ Cleanup done!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 2 — PREREQUISITES
+# ─────────────────────────────────────────
+echo "📦 Phase 2 — Prerequisites..."
+
+# Docker install
+if ! command -v docker &> /dev/null; then
+  echo "  Installing Docker..."
+  sudo apt-get update -qq
+  sudo apt-get install -y docker.io
+  sudo usermod -aG docker $USER
+  newgrp docker
+else
+  echo "  Docker already installed: $(docker --version)"
+fi
+
+# kubectl install — latest stable
+if ! command -v kubectl &> /dev/null; then
+  echo "  Installing kubectl..."
+  KUBECTL_VERSION=$(curl -Ls https://dl.k8s.io/release/stable.txt)
+  echo "  kubectl version: $KUBECTL_VERSION"
+  curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+  chmod +x kubectl
+  sudo mv kubectl /usr/local/bin/
+else
+  echo "  kubectl already installed: $(kubectl version --client --short 2>/dev/null)"
+fi
+
+# Kind install — latest stable
+if ! command -v kind &> /dev/null; then
+  echo "  Installing Kind..."
+  KIND_VERSION=$(curl -s https://api.github.com/repos/kubernetes-sigs/kind/releases/latest \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+  echo "  Kind version: $KIND_VERSION"
+  curl -Lo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+  chmod +x ./kind
+  sudo mv ./kind /usr/local/bin/kind
+else
+  echo "  Kind already installed: $(kind version)"
+fi
+
+# Helm install — latest stable
+if ! command -v helm &> /dev/null; then
+  echo "  Installing Helm..."
+  HELM_VERSION=$(curl -s https://api.github.com/repos/helm/helm/releases/latest \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+  echo "  Helm version: $HELM_VERSION"
+  curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+else
+  echo "  Helm already installed: $(helm version --short)"
+fi
+
+echo "✅ Prerequisites done!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 3 — inotify limits
+# ─────────────────────────────────────────
+echo "📦 Phase 3 — inotify limits..."
+
+sudo sysctl fs.inotify.max_user_instances=512
+sudo sysctl fs.inotify.max_user_watches=524288
+
+echo "fs.inotify.max_user_instances=512
+fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-kind.conf > /dev/null
+sudo sysctl -p /etc/sysctl.d/99-kind.conf > /dev/null
+
+echo "✅ inotify limits set!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 4 — Kind Cluster
+# ─────────────────────────────────────────
+echo "📦 Phase 4 — Kind Cluster..."
+
+cat > ~/kind-config.yaml << KINDEOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+  - role: worker
+KINDEOF
+
+kind create cluster \
+  --name observability-test \
+  --config ~/kind-config.yaml
+
+echo "  Waiting for nodes to be ready..."
+kubectl wait --for=condition=Ready nodes --all --timeout=120s
+
+echo "  Labeling nodes..."
+kubectl label node observability-test-worker role=prometheus
+kubectl label node observability-test-worker2 role=loki
+kubectl label node observability-test-worker3 role=app
+
+kubectl get nodes -L role
+
+echo "✅ Kind cluster ready!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 5 — Helm Repos
+# ─────────────────────────────────────────
+echo "📦 Phase 5 — Helm repos..."
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm repo update
+
+echo "✅ Helm repos added!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 6 — Fetch Latest Versions
+# ─────────────────────────────────────────
+echo "📦 Phase 6 — Fetching latest versions..."
+
+PROMETHEUS_VERSION=$(helm search repo prometheus-community/kube-prometheus-stack \
+  --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['version'])")
+
+LOKI_VERSION=$(helm search repo grafana/loki-stack \
+  --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['version'])")
+
+GRAFANA_VERSION=$(helm search repo grafana/grafana \
+  --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['version'])")
+
+RELOADER_VERSION=$(helm search repo stakater/reloader \
+  --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['version'])")
+
+EVENT_EXPORTER_VERSION=$(helm search repo bitnami/kubernetes-event-exporter \
+  --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['version'])")
+
+LOKI_APP=$(helm search repo grafana/loki-stack \
+  --output json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data[0]['app_version'])")
+
+echo ""
+echo "  📋 Versions:"
+echo "    kube-prometheus-stack : $PROMETHEUS_VERSION"
+echo "    loki-stack            : $LOKI_VERSION (app: $LOKI_APP)"
+echo "    grafana               : $GRAFANA_VERSION"
+echo "    reloader              : $RELOADER_VERSION"
+echo "    event-exporter        : $EVENT_EXPORTER_VERSION"
+echo ""
+echo "✅ Versions fetched!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 7 — Chart banao
+# ─────────────────────────────────────────
+echo "📦 Phase 7 — Creating umbrella chart..."
+
+mkdir ~/my-observability
+cd ~/my-observability
+
+cat > Chart.yaml << CHART
+apiVersion: v2
+name: my-observability
+description: Complete observability stack
+version: 1.0.0
+dependencies:
+  - name: kube-prometheus-stack
+    version: "$PROMETHEUS_VERSION"
+    repository: https://prometheus-community.github.io/helm-charts
+  - name: loki-stack
+    version: "$LOKI_VERSION"
+    repository: https://grafana.github.io/helm-charts
+  - name: grafana
+    version: "$GRAFANA_VERSION"
+    repository: https://grafana.github.io/helm-charts
+  - name: reloader
+    version: "$RELOADER_VERSION"
+    repository: https://stakater.github.io/stakater-charts
+  - name: kubernetes-event-exporter
+    version: "$EVENT_EXPORTER_VERSION"
+    repository: https://charts.bitnami.com/bitnami
+CHART
+
+cat > values.yaml << VALUES
+kube-prometheus-stack:
+  grafana:
+    enabled: false
+  alertmanager:
+    alertmanagerSpec:
+      nodeSelector:
+        role: prometheus
+    persistentVolume:
+      enabled: false
+  prometheus:
+    prometheusSpec:
+      nodeSelector:
+        role: prometheus
+      retention: 7d
+  nodeExporter:
+    enabled: true
+  kubeStateMetrics:
+    enabled: true
+
+loki-stack:
+  loki:
+    image:
+      tag: "${LOKI_APP}"
+    nodeSelector:
+      role: loki
+    persistence:
+      enabled: false
+    config:
+      table_manager:
+        retention_deletes_enabled: true
+        retention_period: 168h
+  promtail:
+    enabled: true
+    daemonset:
+      enabled: true
+    config:
+      clients:
+        - url: http://my-observability-loki:3100/loki/api/v1/push
+
+grafana:
+  nodeSelector:
+    role: prometheus
+  adminPassword: admin123
+  persistence:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 3000
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-my-observability-kube-prom-prometheus:9090
+          isDefault: true
+        - name: Loki
+          type: loki
+          url: http://my-observability-loki:3100
+
+reloader:
+  reloader:
+    watchGlobally: true
+
+kubernetes-event-exporter:
+  global:
+    security:
+      allowInsecureImages: true
+  image:
+    registry: ghcr.io
+    repository: resmoio/kubernetes-event-exporter
+    tag: latest
+  nodeSelector:
+    role: app
+  config:
+    logLevel: info
+    logFormat: json
+    maxEventAgeSeconds: 3600
+    route:
+      routes:
+        - match:
+            - receiver: loki
+    receivers:
+      - name: loki
+        loki:
+          url: "http://my-observability-loki:3100/loki/api/v1/push"
+VALUES
+
+echo "✅ Chart created!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 8 — Deploy
+# ─────────────────────────────────────────
+echo "📦 Phase 8 — Deploying..."
+
+kubectl create namespace observability
+
+helm dependency update
+
+helm install my-observability . \
+  -n observability \
+  -f values.yaml
+
+echo ""
+echo "  Waiting for pods to be ready (5 min timeout)..."
+kubectl wait --for=condition=Ready pods \
+  --all \
+  -n observability \
+  --timeout=300s
+
+echo ""
+echo "✅ Deployment done!"
+echo ""
+
+# ─────────────────────────────────────────
+# PHASE 9 — Verify
+# ─────────────────────────────────────────
+echo "📦 Phase 9 — Verifying..."
+echo ""
+
+kubectl get pods -n observability -o wide
+
+echo ""
+echo "================================================"
+echo "✅ Installation Complete!"
+echo "================================================"
+echo ""
+echo "📊 Grafana access:"
+echo "   Run: kubectl port-forward svc/my-observability-grafana -n observability 9000:3000"
+echo "   URL: http://localhost:9000"
+echo "   User: admin"
+echo "   Pass: admin123"
+echo ""
+echo "🔍 Loki query:"
+echo "   {namespace=\"observability\"}"
+echo ""
+echo "📈 Prometheus query:"
+echo "   up"
+echo ""
+
+EOF
