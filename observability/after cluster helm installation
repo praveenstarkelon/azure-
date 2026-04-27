@@ -1,0 +1,137 @@
+Prerequisite — Helm install hai?
+helm version
+========================================
+install
+
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+helm version
+
+===================================================================================
+Helm Repos Add karo
+================================================================================
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm repo update
+
+========================================================================================
+Phase 3 — Umbrella Chart Banao
+Folder structure banao
+
+mkdir ~/my-observability
+cd ~/my-observability
+
+====================================================
+Chart.yaml banao
+=====================================================
+cat > Chart.yaml << EOF
+apiVersion: v2
+name: my-observability
+description: Complete observability stack
+version: 1.0.0
+dependencies:
+  - name: kube-prometheus-stack
+    version: "79.12.0"
+    repository: https://prometheus-community.github.io/helm-charts
+  - name: loki-stack
+    version: "2.10.3"
+    repository: https://grafana.github.io/helm-charts
+  - name: grafana
+    version: "10.3.0"
+    repository: https://grafana.github.io/helm-charts
+  - name: reloader
+    version: "2.2.9"
+    repository: https://stakater.github.io/stakater-charts
+  - name: kubernetes-event-exporter
+    version: "3.0.0"
+    repository: https://charts.bitnami.com/bitnami
+EOF
+
+================================================================
+
+values.yaml banao
+===================================================================
+cat > values.yaml << EOF
+kube-prometheus-stack:
+  grafana:
+    enabled: false
+  alertmanager:
+    alertmanagerSpec:
+      nodeSelector:
+        role: prometheus
+    persistentVolume:
+      enabled: false
+  prometheus:
+    prometheusSpec:
+      nodeSelector:
+        role: prometheus
+      retention: 7d
+  nodeExporter:
+    enabled: true
+  kubeStateMetrics:
+    enabled: true
+
+loki-stack:
+  loki:
+    image:
+      tag: 2.9.3
+    nodeSelector:
+      role: loki
+    persistence:
+      enabled: false
+    config:
+      table_manager:
+        retention_deletes_enabled: true
+        retention_period: 168h
+  promtail:
+    enabled: true
+
+grafana:
+  nodeSelector:
+    role: prometheus
+  adminPassword: admin123
+  persistence:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 3000
+
+reloader:
+  reloader:
+    watchGlobally: true
+
+kubernetes-event-exporter:
+  nodeSelector:
+    role: app
+  config:
+    logLevel: info
+    logFormat: json
+    maxEventAgeSeconds: 3600
+    route:
+      routes:
+        - match:
+            - receiver: loki
+    receivers:
+      - name: loki
+        loki:
+          url: "http://my-observability-loki:3100/loki/api/v1/push"
+EOF
+
+============================================================================
+
+helm dependency update
+==============================================================================
+
+ls charts/
+
+==================================================================================
+Phase 4 — Deploy karo
+
+==============================================================================
+kubectl create namespace observability
+
+helm install my-observability . \
+  -n observability \
+  -f values.yaml
+===============================================================================
