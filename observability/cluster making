@@ -33,10 +33,76 @@ sudo mv ./kind /usr/local/bin/kind
 8. Verify karo
 kind version
 =======================================================================
-Cluster Config Banao
-9. Config file banao
-=======================================================================
-cat > kind-config.yaml << EOF
+cluster check karo 
+if there are observability cluster running
+kind get clusters
+
+
+==========================================================================
+if there is running and you want to delete it
+Kind Cluster Delete karo
+
+#kind delete cluster --name observability-test
+=============================================================================
+Helm Repos Delete karo
+
+helm repo remove prometheus-community
+helm repo remove grafana
+helm repo remove bitnami
+helm repo remove stakater
+==============================================================================
+verify karo
+
+helm repo list
+==============================================================================
+Helm Chart folder delete karo
+
+rm -rf ~/my-observability
+
+Verify karo:
+ls ~/my-observability
+==============================================================================
+
+Docker cleanup karo
+docker system prune -a --volumes -f
+==============================================================================
+
+Step 2 — Fresh Install
+Prerequisites verify karo
+=============================================================================
+docker --version
+kubectl version --client
+helm version
+kind version
+===============================================================================
+
+Helm Repos add karo
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm repo update
+===================================================================================
+helm repo list
+
+===================================================================================
+inotify limits set karo (Kind ke liye zaroori!)
+bashsudo sysctl fs.inotify.max_user_instances=512
+sudo sysctl fs.inotify.max_user_watches=524288
+
+======================================================================================
+Permanent karo:
+
+echo "fs.inotify.max_user_instances=512
+fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-kind.conf
+sudo sysctl -p /etc/sysctl.d/99-kind.conf
+
+=====================================================================================
+Kind Cluster banao
+
+
+cat > ~/kind-config.yaml << EOF
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -45,52 +111,189 @@ nodes:
   - role: worker
   - role: worker
 EOF
-===========================================================================
-10. Verify config
-cat kind-config.yaml
-=======================================================================
-Cluster Create karo
-11. Cluster banao
 
 kind create cluster \
   --name observability-test \
-  --config kind-config.yaml
+  --config ~/kind-config.yaml
 
-5-10 minute lagenge!
-
-12. Verify karo
 kubectl get nodes
-Output aana chahiye:
-NAME                              STATUS   ROLES
-observability-test-control-plane  Ready    control-plane
-observability-test-worker         Ready    worker
-observability-test-worker2        Ready    worker
-observability-test-worker3        Ready    worker
+=========================================================================
+Output:
+NAME                               STATUS   ROLES
+observability-test-control-plane   Ready    control-plane
+observability-test-worker          Ready    worker
+observability-test-worker2         Ready    worker
+observability-test-worker3         Ready    worker
 
-
-inno@inno-ThinkPad-E14-Gen-2:~/Downloads$ kubectl get nodes
-NAME                               STATUS   ROLES           AGE   VERSION
-observability-test-control-plane   Ready    control-plane   77s   v1.29.2
-observability-test-worker          Ready    <none>          53s   v1.29.2
-observability-test-worker2         Ready    <none>          54s   v1.29.2
-observability-test-worker3         Ready    <none>          53s   v1.29.2
-
-Troubleshooting
-Docker permission error aaye:
-bashsudo usermod -aG docker $USER
-newgrp docker
-Kind cluster already exists:
-bashkind delete cluster --name observability-test
-kind create cluster --name observability-test --config kind-config.yaml
-Nodes not ready:
-bashkubectl get nodes
-kubectl describe node <node-name>
-===================================================================================================
-
-Now labeling 
+===========================================================================
+Nodes Label karo
 
 kubectl label node observability-test-worker role=prometheus
 kubectl label node observability-test-worker2 role=loki
 kubectl label node observability-test-worker3 role=app
+
+kubectl get nodes -L role
+
+===============================================================================
+Umbrella Chart banao
+
+mkdir ~/my-observability
+cd ~/my-observability
+
+=================================================================================
+Chart.yaml
+
+cat > Chart.yaml << EOF
+apiVersion: v2
+name: my-observability
+description: Complete observability stack
+version: 1.0.0
+dependencies:
+  - name: kube-prometheus-stack
+    version: "79.12.0"
+    repository: https://prometheus-community.github.io/helm-charts
+  - name: loki-stack
+    version: "2.10.3"
+    repository: https://grafana.github.io/helm-charts
+  - name: grafana
+    version: "10.3.0"
+    repository: https://grafana.github.io/helm-charts
+  - name: reloader
+    version: "2.2.9"
+    repository: https://stakater.github.io/stakater-charts
+  - name: kubernetes-event-exporter
+    version: "3.6.3"
+    repository: https://charts.bitnami.com/bitnami
+EOF
+
+=================================================================================
+
+values.yaml
+
+
+cat > values.yaml << EOF
+kube-prometheus-stack:
+  grafana:
+    enabled: false
+  alertmanager:
+    alertmanagerSpec:
+      nodeSelector:
+        role: prometheus
+    persistentVolume:
+      enabled: false
+  prometheus:
+    prometheusSpec:
+      nodeSelector:
+        role: prometheus
+      retention: 7d
+  nodeExporter:
+    enabled: true
+  kubeStateMetrics:
+    enabled: true
+
+loki-stack:
+  loki:
+    image:
+      tag: 2.9.3
+    nodeSelector:
+      role: loki
+    persistence:
+      enabled: false
+    config:
+      table_manager:
+        retention_deletes_enabled: true
+        retention_period: 168h
+  promtail:
+    enabled: true
+    daemonset:
+      enabled: true
+    config:
+      clients:
+        - url: http://my-observability-loki:3100/loki/api/v1/push
+
+grafana:
+  nodeSelector:
+    role: prometheus
+  adminPassword: admin123
+  persistence:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 3000
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-my-observability-kube-prom-prometheus:9090
+          isDefault: true
+        - name: Loki
+          type: loki
+          url: http://my-observability-loki:3100
+
+reloader:
+  reloader:
+    watchGlobally: true
+
+kubernetes-event-exporter:
+  global:
+    security:
+      allowInsecureImages: true
+  image:
+    registry: ghcr.io
+    repository: resmoio/kubernetes-event-exporter
+    tag: latest
+  nodeSelector:
+    role: app
+  config:
+    logLevel: info
+    logFormat: json
+    maxEventAgeSeconds: 3600
+    route:
+      routes:
+        - match:
+            - receiver: loki
+    receivers:
+      - name: loki
+        loki:
+          url: "http://my-observability-loki:3100/loki/api/v1/push"
+EOF
+
+============================================================================
+
+Dependencies Download karo
+
+helm dependency update
+
+=============================================================================
+
+ls charts/
+===========================================================================
+Namespace banao
+
+kubectl create namespace observability
+
+==============================================================================
+Install karo
+
+helm install my-observability . \
+  -n observability \
+  -f values.yaml
+
+
+kubectl get pods -n observability
+==============================================================================
+Grafana open karo
+
+kubectl port-forward svc/my-observability-grafana \
+  -n observability 9000:3000
+===========================================================================
+
+Browser: http://localhost:9000
+Login:
+
+Username: admin
+Password: admin123
 
 
